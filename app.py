@@ -10,7 +10,6 @@ import os
 import time
 from vertical_road_signs.vertical_road_signs import load_model_sign_detection, get_country_prediction_based_on_sign
 from landscape.landscape import analyze_image as get_country_prediction_based_on_landscape
-from people.race_prediction import race_prediction as get_country_prediction_based_on_race
 from signs_driving_side.signs_driving_side import predict_road_side
 from road_lines.road_lines import predict_road_lines
 from licenes_plates.license_plate_extractor import detect_license_plates_on_image
@@ -302,7 +301,9 @@ class VideoAnalyzerApp:
             "Humans",
             "Vertical Road Signs",
             "License Plates",
-            "Text"
+            "Text",
+            "Driving side",
+            "Road lines"
         ]
         
         self.detected_data = {
@@ -436,12 +437,17 @@ class VideoAnalyzerApp:
             lbl_title = tk.Label(box_frame, text=title, font=('Arial', 10, 'bold'), bg='white')
             lbl_title.pack(pady=5)
             
-            # Image label
-            img_label = tk.Label(box_frame, bg='white')
+            # Create an image container with fixed height
+            img_container = tk.Frame(box_frame, bg='white', height=150)
+            img_container.pack(fill=tk.X, pady=5)
+            img_container.pack_propagate(False)  # Prevent resizing
+            
+            # Image label inside the container
+            img_label = tk.Label(img_container, bg='white')
             img_label.pack(expand=True)
             
             # Navigation buttons
-            btn_frame = tk.Frame(box_frame, bg='white')
+            btn_frame = tk.Frame(box_frame, bg='white', height=30)
             btn_frame.pack(fill=tk.X)
             
             btn_prev = tk.Button(btn_frame, text="Previous", width=10,
@@ -493,7 +499,7 @@ class VideoAnalyzerApp:
                         # Convert to PIL Image
                         pil_img = Image.fromarray(img_rgb)
                         # Resize if needed
-                        # pil_img.thumbnail((150, 100))
+                        pil_img.thumbnail((150, 100))
                         # Convert to PhotoImage
                         photo_img = ImageTk.PhotoImage(pil_img)
                         # Display and keep reference
@@ -847,15 +853,7 @@ class VideoAnalyzerApp:
             prob_percent = f"{prob*100:.1f}%"
             self.results_list.insert(tk.END, f"{country}: {prob_percent}")
             
-        # Add detections count
-        self.results_list.insert(tk.END, "-" * 30)
-        self.results_list.insert(tk.END, "Object Detections:")
-        for category in self.detection_categories:
-            if category in self.detected_data:
-                count = sum(1 for obj in self.detected_data[category] if obj is not None and obj != [] and obj != "")
-                self.results_list.insert(tk.END, f"{category}: {count} objects")
-            else:
-                self.results_list.insert(tk.END, f"{category}: 0 objects")
+
         
         # Add timestamp
         import datetime
