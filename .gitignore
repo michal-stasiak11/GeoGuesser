@@ -1,4 +1,6 @@
 .venv
+__pycache__
+race_model.h5
 landscape/__pycache__
 licenes_plates/__pycache__
 people/__pycache__

@@ -207,7 +207,7 @@ def predict_location(image, model_path=None):
 
     # ---- License plates ----
     countries_LP, image_LP = detect_license_plates_on_image(img_cv, LICENSE_PLATE_MODEL, CAR_DETECTION_MODEL, config_path, country_decetect_model_from_license_plates)
-    detected_objects["License Plates"].append(image_LP)
+    detected_objects["License Plates"].extend(image_LP)
     if not countries_LP:
         countries_LP = countries
     # ------------------------
@@ -215,7 +215,7 @@ def predict_location(image, model_path=None):
     countries_L = get_country_prediction_based_on_landscape(img_cv)
 
     countries_R, image_R = get_prediction_based_on_race( HUMAN_DETECTION_MODEL, FACE_DETECTION_MODEL, RACE_PREDICTION_MODEL, img_cv)
-    detected_objects["Humans"].append(image_R)
+    detected_objects["Humans"].extend(image_R)
     print(len(image_R))
     
 

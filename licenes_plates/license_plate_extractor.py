@@ -49,9 +49,10 @@ def detect_license_plates_on_image(cv2_image, license_plate_model, coco_model, c
         x1, y1, x2, y2, score, class_id = license_plate
 
         plate_crop = cv2_image[int(y1):int(y2), int(x1):int(x2)]
-        if plate_crop.size > 0:
-            detected_plate_images.append(plate_crop)
+
+        detected_plate_images.append(plate_crop)
     
     detected_plates_countries = predict_country_batch(detected_plate_images, model_country_detect, config)
+    print(len(detected_plate_images), "\n\ndetected plates")
 
     return detected_plates_countries, detected_plate_images
