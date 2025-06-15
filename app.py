@@ -13,6 +13,9 @@ from landscape.landscape import analyze_image as get_country_prediction_based_on
 from people.race_prediction import race_prediction as get_country_prediction_based_on_race
 from signs_driving_side.signs_driving_side import predict_road_side
 from road_lines.road_lines import predict_road_lines
+from licenes_plates.license_plate_extractor import detect_license_plates_on_image
+from ultralytics import YOLO
+
 
 # Global variables for models and configurations
 LOCATION_MODEL = None
@@ -21,6 +24,11 @@ OBJECT_DETECTION_MODEL = None
 TEXT_RECOGNITION_MODEL = None
 VERTICAL_ROAD_SIGN_MODEL = None
 DRIVING_SIDE_MODEL = None
+CAR_DETECTION_MODEL = None
+LICENSE_PLATE_MODEL = None
+country_decetect_model_from_license_plates = None
+config_path =None
+license_plate_model =None
 # Add more global variables for additional models as needed
 
 
@@ -31,15 +39,17 @@ def load_models():
     Returns:
         bool: True if all models loaded successfully, False otherwise
     """
-    global LOCATION_MODEL, LOCATION_CONFIG, OBJECT_DETECTION_MODEL, TEXT_RECOGNITION_MODEL, VERTICAL_ROAD_SIGN_MODEL, DRIVING_SIDE_MODEL
+    global LOCATION_MODEL, LOCATION_CONFIG, OBJECT_DETECTION_MODEL, TEXT_RECOGNITION_MODEL, VERTICAL_ROAD_SIGN_MODEL, DRIVING_SIDE_MODEL, CAR_DETECTION_MODEL, LICENSE_PLATE_MODEL, country_decetect_model_from_license_plates, config_path
     
     try:
         print("Loading models...")
         start_time = time.time()
         
         # Check if model files exist
-        model_path = 'models/location_model.h5'  # Update with your actual model path
-        config_path = 'models/model_config.pkl'  # Update with your actual config path
+        license_plate_model = 'licenes_plates/license_plate_detector.pt'  # Update with your actual model path
+        country_decetect_model_from_license_plates = 'licenes_plates/license_plate_classifier.h5'  
+        car_detection_model = 'licenes_plates/yolov8n.pt'
+        config_path = 'licenes_plates/model_config.pkl'  # Update with your actual config path
         road_sign_model_path = 'vertical_road_signs/fine_tuned_yolov8s.pt'  # Path to sign detection model
         driving_side_model_path = 'signs_driving_side/30k_20e_yolo11m.pt'
 
@@ -94,7 +104,6 @@ def load_models():
         # Driving side detection model
         print("Loading driving side detection model...")
         try:
-            from ultralytics import YOLO
             if os.path.exists(driving_side_model_path):
                 DRIVING_SIDE_MODEL = YOLO(driving_side_model_path)
                 print("Driving side model loaded_successfully")
@@ -102,7 +111,24 @@ def load_models():
                 print(f"Driving side model file not found at: {driving_side_model_path}")
         except Exception as e:
             print(f'Error loading driving side model: {e}')
-            DRIVING_SIDE_MODEL = NONE
+            DRIVING_SIDE_MODEL = None
+        
+        print("Loading license plate detection model...")
+        try:
+            if os.path.exists(car_detection_model):
+                CAR_DETECTION_MODEL = YOLO(car_detection_model)
+                print("Car detection model loaded successfully")
+            else:
+                print(f"Car detection model file not found at: {car_detection_model}")
+            if os.path.exists(license_plate_model):
+                LICENSE_PLATE_MODEL = YOLO(license_plate_model)
+                print("License plate model loaded successfully")
+            else:
+                print(f"License plate model file not found at: {license_plate_model}")
+        except Exception as e:
+            print(f"Error loading license plate model: {e}")
+            CAR_DETECTION_MODEL = None
+            LICENSE_PLATE_MODEL = None
         
         elapsed_time = time.time() - start_time
         print(f"All models loaded successfully in {elapsed_time:.2f} seconds")
@@ -113,8 +139,8 @@ def load_models():
         return False
 
 
-def predict_location(image, model_path=None, config_path=None):
-    global LOCATION_MODEL, LOCATION_CONFIG, VERTICAL_ROAD_SIGN_MODEL
+def predict_location(image, model_path=None):
+    global LOCATION_MODEL, LOCATION_CONFIG, VERTICAL_ROAD_SIGN_MODEL, LICENSE_PLATE_MODEL, CAR_DETECTION_MODEL, config_path, country_decetect_model_from_license_plates
     
     # Use the fixed set of countries
     countries = {
@@ -164,6 +190,13 @@ def predict_location(image, model_path=None, config_path=None):
     detected_objects["Road lines"].append(image_RL)
     # ---------------------
 
+    # ---- License plates ----
+    countries_LP, image_LP = detect_license_plates_on_image(img_cv, LICENSE_PLATE_MODEL, CAR_DETECTION_MODEL, config_path, country_decetect_model_from_license_plates)
+    detected_objects["License Plates"].append(image_LP)
+    if not countries_LP:
+        countries_LP = countries
+    # ------------------------
+
     countries_L = get_country_prediction_based_on_landscape(img_cv)
 
     #countries_R = get_country_prediction_based_on_race(img_cv)
@@ -176,7 +209,7 @@ def predict_location(image, model_path=None, config_path=None):
     return countries_final, detected_objects
 
 
-def predict_batch(image_list, model_path=None, config_path=None):
+def predict_batch(image_list, model_path=None):
     if not image_list:
         return {}, {}
         
@@ -185,7 +218,7 @@ def predict_batch(image_list, model_path=None, config_path=None):
     all_detected_objects = []
     
     for img in image_list:
-        location_preds, detected_objs = predict_location(img, model_path, config_path)
+        location_preds, detected_objs = predict_location(img, model_path)
         all_predictions.append(location_preds)
         all_detected_objects.append(detected_objs)
     
