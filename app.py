@@ -11,6 +11,8 @@ import time
 from vertical_road_signs.vertical_road_signs import load_model_sign_detection, get_country_prediction_based_on_sign
 from landscape.landscape import analyze_image as get_country_prediction_based_on_landscape
 from people.race_prediction import race_prediction as get_country_prediction_based_on_race
+from signs_driving_side.signs_driving_side import predict_road_side
+from road_lines.road_lines import predict_road_lines
 
 # Global variables for models and configurations
 LOCATION_MODEL = None
@@ -18,6 +20,7 @@ LOCATION_CONFIG = None
 OBJECT_DETECTION_MODEL = None
 TEXT_RECOGNITION_MODEL = None
 VERTICAL_ROAD_SIGN_MODEL = None
+DRIVING_SIDE_MODEL = None
 # Add more global variables for additional models as needed
 
 
@@ -28,7 +31,7 @@ def load_models():
     Returns:
         bool: True if all models loaded successfully, False otherwise
     """
-    global LOCATION_MODEL, LOCATION_CONFIG, OBJECT_DETECTION_MODEL, TEXT_RECOGNITION_MODEL, VERTICAL_ROAD_SIGN_MODEL
+    global LOCATION_MODEL, LOCATION_CONFIG, OBJECT_DETECTION_MODEL, TEXT_RECOGNITION_MODEL, VERTICAL_ROAD_SIGN_MODEL, DRIVING_SIDE_MODEL
     
     try:
         print("Loading models...")
@@ -38,6 +41,7 @@ def load_models():
         model_path = 'models/location_model.h5'  # Update with your actual model path
         config_path = 'models/model_config.pkl'  # Update with your actual config path
         road_sign_model_path = 'vertical_road_signs/fine_tuned_yolov8s.pt'  # Path to sign detection model
+        driving_side_model_path = 'signs_driving_side/30k_20e_yolo11m.pt'
 
         
         # Optional: Check if files exist before loading
@@ -86,6 +90,19 @@ def load_models():
         except Exception as e:
             print(f"Error loading road sign model: {e}")
             VERTICAL_ROAD_SIGN_MODEL = None
+
+        # Driving side detection model
+        print("Loading driving side detection model...")
+        try:
+            from ultralytics import YOLO
+            if os.path.exists(driving_side_model_path):
+                DRIVING_SIDE_MODEL = YOLO(driving_side_model_path)
+                print("Driving side model loaded_successfully")
+            else:
+                print(f"Driving side model file not found at: {driving_side_model_path}")
+        except Exception as e:
+            print(f'Error loading driving side model: {e}')
+            DRIVING_SIDE_MODEL = NONE
         
         elapsed_time = time.time() - start_time
         print(f"All models loaded successfully in {elapsed_time:.2f} seconds")
@@ -128,18 +145,24 @@ def predict_location(image, model_path=None, config_path=None):
     detected_objects = {}
     
     # Initialize categories
-    categories = ["Humans", "Vertical Road Signs", "License Plates", "Text"]
+    categories = ["Humans", "Vertical Road Signs", "License Plates", "Text", "Driving side", "Road lines"]
     for category in categories:
         detected_objects[category] = []
-    
-   
-  
-    
     
     countries_VRS, detected_objects_VRS = get_country_prediction_based_on_sign(img_cv, VERTICAL_ROAD_SIGN_MODEL)
 
     detected_objects["Vertical Road Signs"] = detected_objects_VRS
 
+    # ---- Driving side ----
+    if DRIVING_SIDE_MODEL is not None:
+        countries_RS, image_RS = predict_road_side(img_cv, DRIVING_SIDE_MODEL)
+        detected_objects["Driving side"].append(image_RS)
+    # ----------------------
+
+    # ---- Road lines  ----
+    countries_RL, image_RL = predict_road_lines(img_cv)
+    detected_objects["Road lines"].append(image_RL)
+    # ---------------------
 
     countries_L = get_country_prediction_based_on_landscape(img_cv)
 
