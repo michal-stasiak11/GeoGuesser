@@ -16,6 +16,7 @@ from road_lines.road_lines import predict_road_lines
 from licenes_plates.license_plate_extractor import detect_license_plates_on_image
 from ultralytics import YOLO
 
+from race_prediction import load_model as load_model_race_prediction, race_prediction as get_prediction_based_on_race
 
 # Global variables for models and configurations
 LOCATION_MODEL = None
@@ -29,6 +30,9 @@ LICENSE_PLATE_MODEL = None
 country_decetect_model_from_license_plates = None
 config_path =None
 license_plate_model =None
+HUMAN_DETECTION_MODEL = None
+FACE_DETECTION_MODEL = None
+RACE_PREDICTION_MODEL = None
 # Add more global variables for additional models as needed
 
 
@@ -39,9 +43,10 @@ def load_models():
     Returns:
         bool: True if all models loaded successfully, False otherwise
     """
-    global LOCATION_MODEL, LOCATION_CONFIG, OBJECT_DETECTION_MODEL, TEXT_RECOGNITION_MODEL, VERTICAL_ROAD_SIGN_MODEL, DRIVING_SIDE_MODEL, CAR_DETECTION_MODEL, LICENSE_PLATE_MODEL, country_decetect_model_from_license_plates, config_path
+    global LOCATION_MODEL, LOCATION_CONFIG, OBJECT_DETECTION_MODEL, TEXT_RECOGNITION_MODEL, VERTICAL_ROAD_SIGN_MODEL, DRIVING_SIDE_MODEL, CAR_DETECTION_MODEL, LICENSE_PLATE_MODEL, country_decetect_model_from_license_plates, config_path, HUMAN_DETECTION_MODEL, FACE_DETECTION_MODEL, RACE_PREDICTION_MODEL
     
     try:
+        load_model_race_prediction()
         print("Loading models...")
         start_time = time.time()
         
@@ -87,6 +92,17 @@ def load_models():
         time.sleep(0.5)
         TEXT_RECOGNITION_MODEL = "TEXT_RECOGNITION_MODEL_PLACEHOLDER"
         
+        print("Loading Race prediction models detection model...")
+        try:
+            HUMAN_DETECTION_MODEL, FACE_DETECTION_MODEL, RACE_PREDICTION_MODEL = load_model_race_prediction()
+            print("Race prediction model loaded successfully")
+        except Exception as e:
+            print(f"Error loading Race prediction model: {e}")
+            print("You need to download model manually from https://drive.google.com/file/d/1o-B_kxanT5ynbQgwWtMBhYa6c02nirdt/view?usp=sharing")
+            HUMAN_DETECTION_MODEL = None
+            FACE_DETECTION_MODEL = None
+            RACE_PREDICTION_MODEL = None
+
         # Add more model loading code here as needed
         print("Loading road sign detection model...")
         try:
@@ -199,12 +215,16 @@ def predict_location(image, model_path=None):
 
     countries_L = get_country_prediction_based_on_landscape(img_cv)
 
-    #countries_R = get_country_prediction_based_on_race(img_cv)
+    countries_R, image_R = get_prediction_based_on_race( HUMAN_DETECTION_MODEL, FACE_DETECTION_MODEL, RACE_PREDICTION_MODEL, img_cv)
+    detected_objects["Humans"].append(image_R)
+    print(len(image_R))
+    
 
+    
 
 
     ### tutaj zabawa z wagaami i normalizacaj wyniku
-    countries_final = countries_L
+    countries_final = countries_R
     
     return countries_final, detected_objects
 
@@ -832,7 +852,7 @@ class VideoAnalyzerApp:
         self.results_list.insert(tk.END, "Object Detections:")
         for category in self.detection_categories:
             if category in self.detected_data:
-                count = len(self.detected_data[category])
+                count = sum(1 for obj in self.detected_data[category] if obj is not None and obj != [] and obj != "")
                 self.results_list.insert(tk.END, f"{category}: {count} objects")
             else:
                 self.results_list.insert(tk.END, f"{category}: 0 objects")
