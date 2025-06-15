@@ -13,6 +13,7 @@ from landscape.landscape import analyze_image as get_country_prediction_based_on
 from people.race_prediction import race_prediction as get_country_prediction_based_on_race
 from signs_driving_side.signs_driving_side import predict_road_side
 from road_lines.road_lines import predict_road_lines
+from race_prediction import load_model, race_prediction
 
 # Global variables for models and configurations
 LOCATION_MODEL = None
@@ -21,6 +22,9 @@ OBJECT_DETECTION_MODEL = None
 TEXT_RECOGNITION_MODEL = None
 VERTICAL_ROAD_SIGN_MODEL = None
 DRIVING_SIDE_MODEL = None
+HUMAN_DETECTION_MODEL = None
+FACE_DETECTION_MODEL = None
+RACE_PREDICTION_MODEL = None
 # Add more global variables for additional models as needed
 
 
@@ -31,7 +35,7 @@ def load_models():
     Returns:
         bool: True if all models loaded successfully, False otherwise
     """
-    global LOCATION_MODEL, LOCATION_CONFIG, OBJECT_DETECTION_MODEL, TEXT_RECOGNITION_MODEL, VERTICAL_ROAD_SIGN_MODEL, DRIVING_SIDE_MODEL
+    global LOCATION_MODEL, LOCATION_CONFIG, OBJECT_DETECTION_MODEL, TEXT_RECOGNITION_MODEL, VERTICAL_ROAD_SIGN_MODEL, DRIVING_SIDE_MODEL, HUMAN_DETECTION_MODEL, FACE_DETECTION_MODEL, RACE_PREDICTION_MODEL
     
     try:
         print("Loading models...")
@@ -77,6 +81,16 @@ def load_models():
         time.sleep(0.5)
         TEXT_RECOGNITION_MODEL = "TEXT_RECOGNITION_MODEL_PLACEHOLDER"
         
+        print("Loading Race prediction models detection model...")
+        try:
+            HUMAN_DETECTION_MODEL, FACE_DETECTION_MODEL, RACE_PREDICTION_MODEL = load_model()
+            print("Race prediction model loaded successfully")
+        except Exception as e:
+            print(f"Error loading Race prediction model: {e}")
+            HUMAN_DETECTION_MODEL = None
+            FACE_DETECTION_MODEL = None
+            RACE_PREDICTION_MODEL = None
+
         # Add more model loading code here as needed
         print("Loading road sign detection model...")
         try:
