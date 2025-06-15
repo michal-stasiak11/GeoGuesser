@@ -39,6 +39,12 @@ def load_model():
     prototxt_path = os.path.join(script_dir, "deploy.prototxt.txt")
     model_path = os.path.join(script_dir, "res10_300x300_ssd_iter_140000.caffemodel")
     FACE_DETECTION_MODEL = cv2.dnn.readNetFromCaffe(prototxt_path, model_path)
+    if not os.path.exists('race_model.h5'):
+        print("downloading model...")
+        wget_url = "https://drive.google.com/uc?id=1o-B_kxanT5ynbQgwWtMBhYa6c02nirdt"
+        import gdown
+        gdown.download(wget_url, 'race_model.h5', quiet=False)
+    print("Ładowanie modelu...")
     model_path = os.path.join(script_dir, 'race_model.h5')
     RACE_PREDICTION_MODEL = tf.keras.models.load_model(model_path, compile=False)
     return HUMAN_DETECTION_MODEL, FACE_DETECTION_MODEL, RACE_PREDICTION_MODEL
@@ -186,13 +192,16 @@ def predict_race(RACE_PREDICTION_MODEL,image_object):
 
 def combine_probabilities(list_of_probabilities: list[dict]) -> dict:
     print("Łączenie prawdopodobieństw...")
-    
+
+    if not list_of_probabilities:
+        # Return zero probabilities for all countries if nothing detected
+        return {country: 0.0 for country in COUNTRY_PROFILES_DATA.keys()}
 
     if len(list_of_probabilities) == 1:
         return list_of_probabilities[0]
 
     combined_scores = {country: 0.0 for country in list_of_probabilities[0].keys()}
-    
+
     for prob_dict in list_of_probabilities:
         for country, probability in prob_dict.items():
             if country in combined_scores:
@@ -203,7 +212,7 @@ def combine_probabilities(list_of_probabilities: list[dict]) -> dict:
         return combined_scores
 
     final_probabilities = {country: score / total_score for country, score in combined_scores.items()}
-    
+
     return final_probabilities
 
 

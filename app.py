@@ -13,7 +13,7 @@ from landscape.landscape import analyze_image as get_country_prediction_based_on
 from people.race_prediction import race_prediction as get_country_prediction_based_on_race
 from signs_driving_side.signs_driving_side import predict_road_side
 from road_lines.road_lines import predict_road_lines
-from race_prediction import load_model, race_prediction
+from race_prediction import load_model as load_model_race_prediction, race_prediction as get_prediction_based_on_race
 
 # Global variables for models and configurations
 LOCATION_MODEL = None
@@ -38,6 +38,7 @@ def load_models():
     global LOCATION_MODEL, LOCATION_CONFIG, OBJECT_DETECTION_MODEL, TEXT_RECOGNITION_MODEL, VERTICAL_ROAD_SIGN_MODEL, DRIVING_SIDE_MODEL, HUMAN_DETECTION_MODEL, FACE_DETECTION_MODEL, RACE_PREDICTION_MODEL
     
     try:
+        load_model_race_prediction()
         print("Loading models...")
         start_time = time.time()
         
@@ -83,10 +84,11 @@ def load_models():
         
         print("Loading Race prediction models detection model...")
         try:
-            HUMAN_DETECTION_MODEL, FACE_DETECTION_MODEL, RACE_PREDICTION_MODEL = load_model()
+            HUMAN_DETECTION_MODEL, FACE_DETECTION_MODEL, RACE_PREDICTION_MODEL = load_model_race_prediction()
             print("Race prediction model loaded successfully")
         except Exception as e:
             print(f"Error loading Race prediction model: {e}")
+            print("You need to download model manually from https://drive.google.com/file/d/1o-B_kxanT5ynbQgwWtMBhYa6c02nirdt/view?usp=sharing")
             HUMAN_DETECTION_MODEL = None
             FACE_DETECTION_MODEL = None
             RACE_PREDICTION_MODEL = None
@@ -180,12 +182,16 @@ def predict_location(image, model_path=None, config_path=None):
 
     countries_L = get_country_prediction_based_on_landscape(img_cv)
 
-    #countries_R = get_country_prediction_based_on_race(img_cv)
+    countries_R, image_R = get_prediction_based_on_race( HUMAN_DETECTION_MODEL, FACE_DETECTION_MODEL, RACE_PREDICTION_MODEL, img_cv)
+    detected_objects["Humans"].append(image_R)
+    print(len(image_R))
+    
 
+    
 
 
     ### tutaj zabawa z wagaami i normalizacaj wyniku
-    countries_final = countries_L
+    countries_final = countries_R
     
     return countries_final, detected_objects
 
@@ -813,7 +819,7 @@ class VideoAnalyzerApp:
         self.results_list.insert(tk.END, "Object Detections:")
         for category in self.detection_categories:
             if category in self.detected_data:
-                count = len(self.detected_data[category])
+                count = sum(1 for obj in self.detected_data[category] if obj is not None and obj != [] and obj != "")
                 self.results_list.insert(tk.END, f"{category}: {count} objects")
             else:
                 self.results_list.insert(tk.END, f"{category}: 0 objects")
