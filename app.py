@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 import random
 import tkinter as tk
 from tkinter import filedialog, ttk, messagebox
@@ -16,6 +19,7 @@ from licenes_plates.license_plate_extractor import detect_license_plates_on_imag
 from ultralytics import YOLO
 
 from race_prediction import load_model as load_model_race_prediction, race_prediction as get_prediction_based_on_race
+from text_recognition import text_recognizer
 
 # Global variables for models and configurations
 LOCATION_MODEL = None
@@ -85,11 +89,7 @@ def load_models():
         time.sleep(1)
         OBJECT_DETECTION_MODEL = "OBJECT_DETECTION_MODEL_PLACEHOLDER"
         
-        # Load text recognition model (placeholder)
         print("Loading text recognition model...")
-        # TEXT_RECOGNITION_MODEL = YourTextRecognitionFramework.load("models/ocr_model.pt")
-        time.sleep(0.5)
-        TEXT_RECOGNITION_MODEL = "TEXT_RECOGNITION_MODEL_PLACEHOLDER"
         
         print("Loading Race prediction models detection model...")
         try:
@@ -186,10 +186,15 @@ def predict_location(image, model_path=None):
     detected_objects = {}
     
     # Initialize categories
-    categories = ["Humans", "Vertical Road Signs", "License Plates", "Text", "Driving side", "Road lines"]
+    categories = ["Humans", "Vertical Road Signs", "License Plates", "Driving side", "Road lines", "Recognized Text"]
     for category in categories:
         detected_objects[category] = []
     
+    # ---- Text recognition ----
+    countries_from_text, features_from_text = text_recognizer.process(img_cv)
+    detected_objects["Recognized Text"] = features_from_text
+    # ----------------------
+
     countries_VRS, detected_objects_VRS = get_country_prediction_based_on_sign(img_cv, VERTICAL_ROAD_SIGN_MODEL)
 
     detected_objects["Vertical Road Signs"] = detected_objects_VRS
@@ -304,6 +309,7 @@ class VideoAnalyzerApp:
             "Text",
             "Driving side",
             "Road lines"
+            "Recognized Text"
         ]
         
         self.detected_data = {

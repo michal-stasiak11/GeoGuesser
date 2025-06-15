@@ -1,9 +1,11 @@
 .venv
 __pycache__
 race_model.h5
+venv
 landscape/__pycache__
 licenes_plates/__pycache__
 people/__pycache__
 road_lines/__pycache__
 signs_driving_side/__pycache__
+vertical_road_signs/__pycache__
 vertical_road_signs/__pycache__
