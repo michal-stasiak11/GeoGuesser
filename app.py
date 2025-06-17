@@ -192,7 +192,7 @@ def predict_location(image, model_path=None):
     
     # ---- Text recognition ----
     countries_from_text, features_from_text = text_recognizer.process(img_cv)
-    detected_objects["Recognized Text"] = features_from_text
+    detected_objects["Recognized Text"].append(features_from_text)
     # ----------------------
 
     countries_VRS, detected_objects_VRS = get_country_prediction_based_on_sign(img_cv, VERTICAL_ROAD_SIGN_MODEL)
@@ -306,9 +306,8 @@ class VideoAnalyzerApp:
             "Humans",
             "Vertical Road Signs",
             "License Plates",
-            "Text",
             "Driving side",
-            "Road lines"
+            "Road lines",
             "Recognized Text"
         ]
         
@@ -427,7 +426,7 @@ class VideoAnalyzerApp:
             "license_plates": "License Plates",
             "buildings": "Buildings",
             "landmarks": "Landmarks", 
-            "text": "Text"
+            "text": "RecognizedText"
         }
         
         self.detection_boxes = []
