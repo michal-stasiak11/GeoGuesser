@@ -280,7 +280,7 @@ class VideoAnalyzerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Video Analyzer Template")
-        self.root.state('zoomed')
+        self.root.state('normal')
         
         # Stałe rozmiary
         self.VIDEO_WIDTH = 800
