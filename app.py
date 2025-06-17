@@ -18,7 +18,7 @@ from road_lines.road_lines import predict_road_lines
 from licenes_plates.license_plate_extractor import detect_license_plates_on_image
 from ultralytics import YOLO
 
-from race_prediction import load_model as load_model_race_prediction, race_prediction as get_prediction_based_on_race
+from people.race_prediction import load_model as load_model_race_prediction, race_prediction as get_prediction_based_on_race
 from text_recognition import text_recognizer
 
 # Global variables for models and configurations
@@ -151,8 +151,25 @@ def load_models():
         
     except Exception as e:
         print(f"Error loading models: {str(e)}")
-        return False
+        return 
+        
+# Define weights for each prediction model
+weights = {
+    "landscape": 0.03,   
+    "road_signs": 0.30,   
+    "driving_side": 0.06, 
+    "road_lines": 0.11,   
+    "race": 0.15,         
+    "license_plates" : 0.20,
+    "recognized_text": 0.20,
+}
 
+# Function to normalize country scores
+def normalize_scores(country_dict):
+    total = sum(country_dict.values())
+    if total > 0:
+        return {country: score/total for country, score in country_dict.items()}
+    return country_dict
 
 def predict_location(image, model_path=None):
     global LOCATION_MODEL, LOCATION_CONFIG, VERTICAL_ROAD_SIGN_MODEL, LICENSE_PLATE_MODEL, CAR_DETECTION_MODEL, config_path, country_decetect_model_from_license_plates
@@ -191,7 +208,7 @@ def predict_location(image, model_path=None):
         detected_objects[category] = []
     
     # ---- Text recognition ----
-    countries_from_text, features_from_text = text_recognizer.process(img_cv)
+    countries_T, features_from_text = text_recognizer.process(img_cv)
     detected_objects["Recognized Text"].append(features_from_text)
     # ----------------------
 
@@ -223,13 +240,61 @@ def predict_location(image, model_path=None):
     detected_objects["Humans"].extend(image_R)
     print(len(image_R))
     
+    # Initialize countries_final with zeros for all countries
+    countries_final = {country: 0 for country in countries_L.keys()}
 
-    
+    # Add weighted landscape predictions
+    normalized_L = normalize_scores(countries_L)
+    for country, score in normalized_L.items():
+        countries_final[country] += score * weights["landscape"]
 
+    # Add weighted road sign predictions if available
+    if countries_VRS:
+        normalized_VRS = normalize_scores(countries_VRS)
+        for country, score in normalized_VRS.items():
+            if country in countries_final:  # Ensure country exists in final dict
+                countries_final[country] += score * weights["road_signs"]
 
-    ### tutaj zabawa z wagaami i normalizacaj wyniku
-    countries_final = countries_R
-    
+    # Add weighted driving side predictions if available
+    if DRIVING_SIDE_MODEL is not None and countries_RS:
+        normalized_RS = normalize_scores(countries_RS)
+        for country, score in normalized_RS.items():
+            if country in countries_final:
+                countries_final[country] += score * weights["driving_side"]
+
+    # Add weighted road lines predictions if available
+    if countries_RL:
+        normalized_RL = normalize_scores(countries_RL)
+        for country, score in normalized_RL.items():
+            if country in countries_final:
+                countries_final[country] += score * weights["road_lines"]
+
+    if countries_R:
+        normalized_R = normalize_scores(countries_R)
+        for country, score in normalized_R.items():
+            if country in countries_final:
+                countries_final[country] += score * weights["race"]
+
+    if countries_LP:
+        normalized_LP = normalize_scores(countries_LP)
+        for country, score in normalized_LP.items():
+            if country in countries_final:
+                countries_final[country] += score * weights["license_plates"]
+
+    if countries_T:
+        normalized_T = normalize_scores(countries_T)
+        for country, score in normalized_T.items():
+            if country in countries_final:
+                countries_final[country] += score * weights["recognized_text"]
+
+    # Normalize final scores to ensure they sum to 1
+    countries_final = normalize_scores(countries_final)
+
+    # Optional: Print combined scores
+    print("Final weighted country predictions:")
+    for country, score in sorted(countries_final.items(), key=lambda x: x[1], reverse=True):
+        print(f"{country}: {score:.4f}")
+
     return countries_final, detected_objects
 
 

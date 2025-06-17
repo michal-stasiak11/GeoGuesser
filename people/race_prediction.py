@@ -1,27 +1,69 @@
 import cv2
-from inference_sdk import InferenceHTTPClient
 from ultralytics import YOLO
 import os
 import csv
 import numpy as np
 import sys
+import tensorflow as tf
+
+
+COUNTRY_PROBABILITIES = None
+COUNTRY_PROFILES_DATA = {
+    'Ghana':          {'black': 0.98, 'asian': 0.002, 'indian': 0.005, 'others': 0.006, 'white': 0.01},
+    'Kenya':          {'black': 0.97, 'asian': 0.003, 'indian': 0.010, 'others': 0.006, 'white': 0.01},
+    'South Africa':   {'black': 0.80, 'asian': 0.010, 'indian': 0.030, 'others': 0.030, 'white': 0.10},
+    'Japan':          {'black': 0.005, 'asian': 0.98, 'indian': 0.005, 'others': 0.11, 'white': 0.005},
+    'China':          {'black': 0.002, 'asian': 0.97, 'indian': 0.005, 'others': 0.10, 'white': 0.005},
+    'Iran':           {'black': 0.005, 'asian': 0.01, 'indian': 0.010, 'others': 0.91, 'white': 0.005},
+    'Sweden':         {'black': 0.01, 'asian': 0.01, 'indian': 0.020, 'others': 0.05, 'white': 0.90},
+    'Czech Republic': {'black': 0.002, 'asian': 0.005, 'indian': 0.002, 'others': 0.02, 'white': 0.95},
+    'Austria':        {'black': 0.002, 'asian': 0.005, 'indian': 0.002, 'others': 0.02, 'white': 0.95},
+    'United States':  {'black': 0.13, 'asian': 0.06, 'indian': 0.020, 'others': 0.28, 'white': 0.58},
+    'Canada':         {'black': 0.03, 'asian': 0.06, 'indian': 0.030, 'others': 0.12, 'white': 0.85},
+    'Mexico':         {'black': 0.01, 'asian': 0.005, 'indian': 0.005, 'others': 0.96, 'white': 0.05},
+    'Chile':          {'black': 0.01, 'asian': 0.005, 'indian': 0.005, 'others': 0.96, 'white': 0.05},
+    'Peru':           {'black': 0.01, 'asian': 0.005, 'indian': 0.005, 'others': 0.96, 'white': 0.05},
+    'Argentina':      {'black': 0.01, 'asian': 0.005, 'indian': 0.005, 'others': 0.91, 'white': 0.08},
+    'Australia':      {'black': 0.01, 'asian': 0.04, 'indian': 0.030, 'others': 0.04, 'white': 0.85},
+    'New Zealand':    {'black': 0.01, 'asian': 0.05, 'indian': 0.050, 'others': 0.05, 'white': 0.80},
+    'Fiji':           {'black': 0.002, 'asian': 0.01, 'indian': 0.400, 'others': 0.06, 'white': 0.05},
+    'Thailand':       {'black': 0.002, 'asian': 0.95, 'indian': 0.005, 'others': 0.09, 'white': 0.01},
+    'France':         {'black': 0.03, 'asian': 0.02, 'indian': 0.020, 'others': 0.06, 'white': 0.80}
+}
+RACE_NAMES = ['white', 'black', 'asian', 'indian', 'others']
+
+
+def load_model():
+    HUMAN_DETECTION_MODEL = YOLO('fine_tuned_yolov8s.pt')
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    prototxt_path = os.path.join(script_dir, "deploy.prototxt.txt")
+    model_path = os.path.join(script_dir, "res10_300x300_ssd_iter_140000.caffemodel")
+    FACE_DETECTION_MODEL = cv2.dnn.readNetFromCaffe(prototxt_path, model_path)
+    if not os.path.exists('race_model.h5'):
+        print("downloading model...")
+        wget_url = "https://drive.google.com/uc?id=1o-B_kxanT5ynbQgwWtMBhYa6c02nirdt"
+        import gdown
+        gdown.download(wget_url, 'race_model.h5', quiet=False)
+    print("Ładowanie modelu...")
+    model_path = os.path.join(script_dir, 'race_model.h5')
+    RACE_PREDICTION_MODEL = tf.keras.models.load_model(model_path, compile=False)
+    return HUMAN_DETECTION_MODEL, FACE_DETECTION_MODEL, RACE_PREDICTION_MODEL
 
 # ===========================================================
 # PERSON DETECTION
 # ===========================================================
 
 
-def detect_and_crop_person(image: np.ndarray, conf_threshold: float = 0.1):
+def detect_and_crop_person(HUMAN_DETECTION_MODEL,image: np.ndarray, conf_threshold: float = 0.1):
     print("Wykrywanie osób...")
-    yolo_model = YOLO('fine_tuned_yolov8s.pt')
     cropped_people = []
-    results = yolo_model(image, verbose=False)
+    results = HUMAN_DETECTION_MODEL(image, verbose=False)
 
     for r in results:
         for box in r.boxes:
             if box.conf[0] > conf_threshold:
                 class_id = int(box.cls[0])
-                class_name = yolo_model.names[class_id]
+                class_name = HUMAN_DETECTION_MODEL.names[class_id]
                 if class_name == 'pedestrian':
                     x1, y1, x2, y2 = box.xyxy[0]
                     x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
@@ -46,24 +88,15 @@ def detect_and_crop_person(image: np.ndarray, conf_threshold: float = 0.1):
 # FACE DETECTION
 # ===========================================================
 
-def detect_faces(image, confidence_threshold=0.4):
+def detect_faces(FACE_DETECTION_MODEL,image, confidence_threshold=0.4):
     print("Wykrywanie jednej twarzy...")
     (h, w) = image.shape[:2]
 
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    prototxt_path = os.path.join(script_dir, "deploy.prototxt.txt")
-    model_path = os.path.join(script_dir, "res10_300x300_ssd_iter_140000.caffemodel")
-
-    try:
-        net = cv2.dnn.readNetFromCaffe(prototxt_path, model_path)
-    except cv2.error as e:
-        print("BŁĄD KRYTYCZNY: Nie można wczytać plików modelu.")
-        sys.exit(1)
-
     blob = cv2.dnn.blobFromImage(cv2.resize(image, (300, 300)), 1.0,
                                  (300, 300), (104.0, 177.0, 123.0))
-    net.setInput(blob)
-    detections = net.forward()
+    
+    FACE_DETECTION_MODEL.setInput(blob)
+    detections = FACE_DETECTION_MODEL.forward()
 
     if detections.shape[2] > 0:
         confidence = detections[0, 0, 0, 2]
@@ -93,74 +126,63 @@ def detect_faces(image, confidence_threshold=0.4):
 # RACE PREDICTION
 # ===========================================================
 
-# --- KONFIGURACJA ---
-API_KEY = "uqCeGhsQZJDyzIvgQ06V"
-MODEL_ID = "human-race-detection/7"
-CSV_FILE = "race_country_probabilities.csv"
-
-
-try:
-    CLIENT = InferenceHTTPClient(api_url="https://serverless.roboflow.com", api_key=API_KEY)
-except Exception as e:
-    print(f"Błąd krytyczny podczas inicjalizacji klienta: {e}")
-    exit()
-
-def load_country_data(filepath):
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"Plik {filepath} nie został znaleziony. Upewnij się, że jest w tym samym folderze co skrypt.")
-
-    country_profiles = {}
-    print(f"Wczytuję dane z pliku: {filepath}")
-    with open(filepath, mode='r', encoding='utf-8') as infile:
-        reader = csv.reader(infile, delimiter=';')
-        headers = next(reader)[1:] 
-
-        for row in reader:
-            if not row: continue
-            country_name = row[0].split(" (")[0]
-            profiles = {headers[i]: float(row[i+1]) / 100.0 for i in range(len(headers))}
-            country_profiles[country_name] = profiles
-            
-    print("Dane o krajach wczytane pomyślnie.")
-    return country_profiles, headers
-
-try:
-    COUNTRY_PROFILES, RACE_HEADERS = load_country_data(CSV_FILE)
-except FileNotFoundError as e:
-    print(f"BŁĄD: {e}")
-    exit()
-
-
-def predict_race(image_object):
-
+def predict_race(RACE_PREDICTION_MODEL,image_object):
+    country_profiles = COUNTRY_PROFILES_DATA
     
-    print("Przewidywanie rasy...")
-    try:
-        result = CLIENT.infer(image_object, model_id=MODEL_ID)
-    except Exception as e:
-        print(f"Błąd podczas komunikacji z API Roboflow: {e}")
-        return None
-    detected_races = {race: 0.0 for race in RACE_HEADERS}
-    for prediction in result.get('predictions', []):
-        detected_class = prediction['class']
-        confidence = prediction['confidence']
-        
-        if detected_class in detected_races:
-            detected_races[detected_class] = max(detected_races[detected_class], confidence)
-        else:
-            print(f"[Ostrzeżenie] Model zwrócił nieznaną klasę: '{detected_class}'. Zostanie zignorowana.")   
+    img_rgb = cv2.cvtColor(image_object, cv2.COLOR_BGR2RGB)
+    img_resized = cv2.resize(img_rgb, (224, 224))
+    img_array = np.array(img_resized, dtype='float32')
+    processed_image = np.expand_dims(img_array, axis=0)
+    
+    predictions = RACE_PREDICTION_MODEL.predict(processed_image, verbose=0)
+    race_probabilities_vector = predictions[2][0]
+
+    model_output_map = {
+        'white': race_probabilities_vector[0],
+        'black': race_probabilities_vector[1],
+        'asian': race_probabilities_vector[2],
+        'indian': race_probabilities_vector[3],
+        'others': race_probabilities_vector[4]
+    }
+    
     country_scores = {}
-    for country, profile in COUNTRY_PROFILES.items():
-        score = sum(detected_races[race] * probability_in_country * confidence for race, probability_in_country in profile.items())
+    for country, demographic_profile in country_profiles.items():
+        score = 0.0
+        for race_name_from_csv, demographic_prob in demographic_profile.items():
+            model_predicted_prob = model_output_map.get(race_name_from_csv, 0.0)
+            score += model_predicted_prob * demographic_prob
         country_scores[country] = score
 
     total_score = sum(country_scores.values())
-    if total_score == 0:
-        return {country: 0.0 for country in COUNTRY_PROFILES.keys()}
-    final_probabilities = {country: (score *confidence*confidence) / total_score for country, score in country_scores.items()}
-    print(f"\nZnaleziony: {detected_class} z pewnością {confidence:.2%}")
+    if total_score == 0: total_score = 1
+    final_probabilities = {country: float(score / total_score) for country, score in country_scores.items()}
 
-    return final_probabilities
+    predicted_index = np.argmax(race_probabilities_vector)
+    predicted_race_name = RACE_NAMES[predicted_index]
+    confidence = race_probabilities_vector[predicted_index]
+    label_text = f"{predicted_race_name}"
+    
+    (h, w, _) = image_object.shape
+    
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = w/10.0
+    red_color = (0, 0, 255)
+
+    position = (0, 450)
+
+    output_image = image_object.copy()
+    output_image = cv2.resize(output_image, (500, 500))
+            
+    cv2.putText(output_image, 
+                label_text, 
+                position, 
+                font, 
+                font_scale, 
+                red_color, 
+                5, 
+                cv2.LINE_AA)
+                
+    return final_probabilities, output_image
 
 
 
@@ -170,14 +192,16 @@ def predict_race(image_object):
 
 def combine_probabilities(list_of_probabilities: list[dict]) -> dict:
     print("Łączenie prawdopodobieństw...")
+
     if not list_of_probabilities:
-        return {}
+        # Return zero probabilities for all countries if nothing detected
+        return {country: 0.0 for country in COUNTRY_PROFILES_DATA.keys()}
 
     if len(list_of_probabilities) == 1:
         return list_of_probabilities[0]
 
     combined_scores = {country: 0.0 for country in list_of_probabilities[0].keys()}
-    
+
     for prob_dict in list_of_probabilities:
         for country, probability in prob_dict.items():
             if country in combined_scores:
@@ -188,7 +212,7 @@ def combine_probabilities(list_of_probabilities: list[dict]) -> dict:
         return combined_scores
 
     final_probabilities = {country: score / total_score for country, score in combined_scores.items()}
-    
+
     return final_probabilities
 
 
@@ -196,34 +220,44 @@ def combine_probabilities(list_of_probabilities: list[dict]) -> dict:
 # MAIN FUNCTION 
 # ===========================================================
 
-def race_prediction(image):
-    person_images = detect_and_crop_person(image)
+
+
+def race_prediction(HUMAN_DETECTION_MODEL, FACE_DETECTION_MODEL,RACE_PREDICTION_MODEL,image):
+    person_images = detect_and_crop_person(HUMAN_DETECTION_MODEL, image)
     probabilities = []
+    face_images = []
     if person_images:
         for person_image in person_images:
-            face_image = detect_faces(person_image)
+            face_image = detect_faces(FACE_DETECTION_MODEL, person_image)
             if face_image is None:
                 print("Nie wykryto twarzy w obrazie.")
                 continue
-            probabilities.append(predict_race(face_image))
-        return combine_probabilities(probabilities)
+            probability, face_image = predict_race(RACE_PREDICTION_MODEL, face_image)
+            probabilities.append(probability)
+            face_images.append(face_image)
+
+        return combine_probabilities(probabilities), face_images
     else:
         print("Nie wykryto żadnej osoby na obrazie.")
-        return None
+        return combine_probabilities(probabilities), face_images
 
 
 
 
 # if __name__ == "__main__":
 #     probabilities = []
+#     face_images = []
+#     load_model()
+
 #     image = cv2.imread("image.jpg")
-    
-#     probabilities = race_prediction(image)
-#     if probabilities is not None:
-#         sorted_results = sorted(probabilities.items(), key=lambda item: item[1], reverse=True)
-#         print("--- Posortowane wyniki ---")
-#         if not sorted_results:
-#             print("Brak wyników do wyświetlenia.")
-#         else:
-#             for kraj, prawdopodobienstwo in sorted_results:
-#                 print(f"{kraj}: {prawdopodobienstwo:.2%}")
+#     probabilities, face_images  = race_prediction(image)
+
+#     print(probabilities)
+#     # if probabilities is not None:
+#     #     sorted_results = sorted(probabilities.items(), key=lambda item: item[1], reverse=True)
+#     #     print("--- Posortowane wyniki ---")
+#     #     if not sorted_results:
+#     #         print("Brak wyników do wyświetlenia.")
+#     #     else:
+#     #         for kraj, prawdopodobienstwo in sorted_results:
+#     #             print(f"{kraj}: {prawdopodobienstwo:.2%}")
